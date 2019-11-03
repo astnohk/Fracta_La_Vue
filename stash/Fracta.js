@@ -14,6 +14,7 @@ class FractaLaVue {
 		this.canvasHeight = 800;
 
 		this.fractalMap = [];
+		this.fractalTimeStep = 5;
 		this.fractalTimeMax = 10000;
 		this.fractalTimeCurrent = 0;
 
@@ -181,7 +182,7 @@ class FractaLaVue {
 	// ----- REALTIME -----
 	calculate()
 	{
-		for (let t = 0; t < 10; t++) {
+		for (let t = 0; t < this.fractalTimeStep; t++) {
 			this.fractalTimeCurrent += 1;
 			for (let m = 0; m < this.canvas.height; m++) {
 				for (let n = 0; n < this.canvas.width; n++) {
