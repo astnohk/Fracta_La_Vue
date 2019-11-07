@@ -25,6 +25,7 @@ class FractaLaVue {
 		this.overwritingButton = null;
 		this.calcCModeButton = null;
 		this.overwriting = false;
+		this.fractalMode = "z_{n + 1} = z_{n} + c";
 		this.calcCMode = "normal";
 
 		this.timeClock = null;
@@ -36,7 +37,7 @@ class FractaLaVue {
 		this.viewScaleStep = 0.5;
 
 		this.camera = {
-			pos: {x: -1.25, y: 0.0, z: 0.0},
+			pos: {x: -1.0, y: 0.0, z: 0.0},
 		};
 
 		this.prev_mouse = {x: 0, y: 0};
@@ -374,14 +375,26 @@ class FractaLaVue {
 		switch (this.calcCMode) {
 			case "normal":
 				this.calcCMode = "exp";
+				this.calcCModeButton.innerHTML = "<math>" +
+				    "<mi>c</mi><mo>=</mo>" +
+				    "<mi>exp</mi><mo>&ApplyFunction;</mo><mrow><mo>(</mo><mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi><mo>)</mo></mrow>" +
+				    "</math>";
 				break;
 			case "exp":
 				this.calcCMode = "z^2";
+				this.calcCModeButton.innerHTML = "<math>" +
+				    "<mi>c</mi><mo>=</mo>" +
+				    "<msup><mrow><mo>(</mo><mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi><mo>)</mo></mrow><mn>2</mn></msup>" +
+				    "</math>";
 				break;
 			default:
 				this.calcCMode = "normal";
+				this.calcCModeButton.innerHTML = "c = x + i * y";
+				this.calcCModeButton.innerHTML = "<math>" +
+				    "<mi>c</mi><mo>=</mo>" +
+				    "<mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi>" +
+				    "</math>";
 		}
-		this.calcCModeButton.innerHTML = "calc C mode (" + this.calcCMode + ")";
 		this.initFlag = true;
 	}
 }
