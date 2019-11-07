@@ -9,6 +9,7 @@ class FractaLaVue {
 		this.rootWindow.rootInstance = this;
 		this.rootWindowStyle = window.getComputedStyle(this.rootWindow);
 		this.loopEnded = true;
+		this.initFlag = false;
 
 		this.canvasWidth = 800;
 		this.canvasHeight = 800;
@@ -22,29 +23,21 @@ class FractaLaVue {
 		this.touchCounting = false;
 
 		this.overwritingButton = null;
-		this.view3DButton = null;
+		this.calcCModeButton = null;
 		this.overwriting = false;
-		this.view3D = 0;
-		this.eyesDistance = 30;
+		this.calcCMode = "normal";
 
 		this.timeClock = null;
 
 		this.bitmap = null;
 		this.canvas = null;
 		this.context = null;
-		this.viewScale = Math.max(this.canvasWidth, this.canvasHeight) / 2.0;
+		this.viewScale = Math.max(this.canvasWidth, this.canvasHeight) / 4.0;
+		this.viewScaleStep = 0.5;
 
 		this.camera = {
-			pos: {x: -0.5, y: 0.0, z: 0.0},
-			view: {
-				X: {x: 1.0, y: 0.0, z: 0.0},
-				Y: {x: 0.0, y: -1.0, z: 0.0},
-				Z: {x: 0.0, y: 0.0, z: -1.0}
-			},
-			F: 30
+			pos: {x: -1.25, y: 0.0, z: 0.0},
 		};
-		this.colormapQuantize = 200;
-		this.colormap = {current: [], normal: new Array(this.colormapQuantize), bluesea: new Array(this.colormapQuantize)};
 
 		this.prev_mouse = {x: 0, y: 0};
 		this.prev_touches = [];
@@ -56,9 +49,6 @@ class FractaLaVue {
 // ----- Initialize -----
 	init()
 	{
-		// Make colormap
-		this.makeColormap();
-		this.colormap.current = this.colormap.normal;
 		// Initialize canvas
 		this.prepareCanvas();
 		// Set event listener
@@ -128,40 +118,21 @@ class FractaLaVue {
 		this.overwritingButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchOverwriting(e); }, false);
 		this.rootWindow.appendChild(this.overwritingButton);
 
-		this.view3DButton = document.createElement("div");
-		this.view3DButton.rootInstance = this;
-		this.view3DButton.innerHTML = "3D view switch (normal)";
-		this.view3DButton.id = "FractaLaVueView3DButton";
-		this.view3DButton.addEventListener("mousedown", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchView3D(e); }, false);
-		this.view3DButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchView3D(e); }, false);
-		this.rootWindow.appendChild(this.view3DButton);
-	}
-
-	makeColormap()
-	{
-		let dc = 255 / (this.colormapQuantize / 2);
-		// Make colormap normal
-		for (let i = 0; i <= Math.floor(this.colormapQuantize / 2); i++) {
-			this.colormap.normal[i] = 'rgb(0,' + Math.min(255, Math.ceil(dc * i)) + ',' + Math.max(0, 255 - Math.ceil(dc * i)) + ')';
-		}
-		for (let i = Math.floor(this.colormapQuantize / 2); i < this.colormapQuantize; i++) {
-			this.colormap.normal[i] = 'rgb(' + Math.min(255, Math.ceil(dc * (i - this.colormapQuantize / 2))) + ',' + Math.max(0, 255 - Math.ceil(dc * (i - this.colormapQuantize / 2))) + ',0)';
-		}
-		// Make colormap bluesea
-		dc = 255 / this.colormapQuantize;
-		for (let i = 0; i < this.colormapQuantize; i++) {
-			this.colormap.bluesea[i] = 'rgb(' + Math.min(255, Math.ceil(dc / 2 * i)) + ',' + Math.min(255, Math.ceil(dc * i)) + ',255)';
-		}
+		this.calcCModeButton = document.createElement("div");
+		this.calcCModeButton.rootInstance = this;
+		this.calcCModeButton.innerHTML = "calc C mode (" + this.calcCMode + ")";
+		this.calcCModeButton.id = "FractaLaVueCalcCModeButton";
+		this.calcCModeButton.addEventListener("mousedown", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchCalcCMode(e); }, false);
+		this.calcCModeButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchCalcCMode(e); }, false);
+		this.rootWindow.appendChild(this.calcCModeButton);
 	}
 
 	initFractal() {
 		this.fractalTimeCurrent = 0;
-		for (let m = 0; m < this.canvas.height; m++) {
-			for (let n = 0; n < this.canvas.width; n++) {
-				this.fractalMap[this.canvas.width * m + n] = {
-					t: 0,
-					z: {re: 0, im: 0}};
-			}
+		for (let i = 0; i < this.canvas.height * this.canvas.width; i++) {
+			this.fractalMap[i] = {
+				t: 0,
+				z: {re: 0, im: 0}};
 		}
 	}
 
@@ -171,6 +142,10 @@ class FractaLaVue {
 	{
 		if (!this.loopEnded) {
 			return;
+		}
+		if (this.initFlag) {
+			this.initFlag = false;
+			this.initFractal();
 		}
 		this.calculate();
 		this.draw();
@@ -189,10 +164,10 @@ class FractaLaVue {
 					let z = this.fractalMap[this.canvas.width * m + n].z;
 					let zp = this.c_plus(
 						this.c_mult(z, z),
-						{
+						this.c_getC({
 							re: this.camera.pos.x + (n - this.canvas.width / 2.0) / this.viewScale,
 							im: this.camera.pos.y + (m - this.canvas.height / 2.0) / this.viewScale
-						});
+						}, this.calcCMode));
 					this.fractalMap[this.canvas.width * m + n].z = zp;
 					if (this.c_abs(zp) < 2.0) {
 						this.fractalMap[this.canvas.width * m + n].t += 1;
@@ -216,6 +191,20 @@ class FractaLaVue {
 	c_abs(z)
 	{
 		return Math.sqrt(z.re * z.re + z.im * z.im);
+	}
+
+	c_getC(z, mode)
+	{
+		if (mode === "exp") {
+			let r = Math.exp(z.re);
+			return {re: r * Math.cos(z.im),
+				im: r * Math.sin(z.im)};
+		} else if (mode === "z^2") {
+			return this.c_mult(z, z);
+		} else { // "normal"
+			return {re: z.re,
+				im: z.im};
+		}
 	}
 
 	draw()
@@ -242,20 +231,15 @@ class FractaLaVue {
 		this.context.putImageData(this.bitmap, 0, 0);
 	}
 
-	moveCamera(x, y, z)
+	moveCamera(x, y, zoom)
 	{
-		this.camera.pos.x +=
-		    x * this.camera.view.X.x +
-		    y * this.camera.view.Y.x +
-		    z * this.camera.view.Z.x;
-		this.camera.pos.y +=
-		    x * this.camera.view.X.y +
-		    y * this.camera.view.Y.y +
-		    z * this.camera.view.Z.y;
-		this.camera.pos.z +=
-		    x * this.camera.view.X.z +
-		    y * this.camera.view.Y.z +
-		    z * this.camera.view.Z.z;
+		this.camera.pos.x += x;
+		this.camera.pos.y += y;
+		if (zoom != 0) {
+			this.viewScale *= zoom;
+		}
+		// Init fractal because the map can't scale correctly
+		this.initFlag = true;
 	}
 
 	mouseClick(event)
@@ -286,14 +270,11 @@ class FractaLaVue {
 		if (event.type === "mousemove") {
 			let pointer = this.pointerPositionDecoder(event);
 			let move = {x: 0, y: 0};
-			move.x = pointer.x - this.prev_mouse.x;
-			move.y = pointer.y - this.prev_mouse.y;
+			move.x = (pointer.x - this.prev_mouse.x) / this.viewScale;
+			move.y = (pointer.y - this.prev_mouse.y) / this.viewScale;
 			if ((event.buttons & 1) != 0) {
-				this.rotCamera(
-				    -2.0 * Math.PI * move.x / this.rotDegree,
-				    2.0 * Math.PI * move.y / this.rotDegree);
-			} else if ((event.buttons & 4) != 0) {
-				this.moveCamera(move.x, move.y, 0);
+				// Invert signs because we want move the plane
+				this.moveCamera(-move.x, -move.y, 0);
 			}
 			this.prev_mouse = {x: pointer.x, y: pointer.y};
 		} else if (event.type === "touchmove") {
@@ -310,22 +291,23 @@ class FractaLaVue {
 				    },
 				    touches_current);
 				if (n >= 0) {
-					move.x = pointer.x - this.prev_touches[n].x;
-					move.y = pointer.y - this.prev_touches[n].y;
-					this.rotCamera(
-					    -2.0 * Math.PI * move.x / this.rotDegree,
-					    2.0 * Math.PI * move.y / this.rotDegree);
+					move.x = (pointer.x - this.prev_touches[n].x) / this.viewScale;
+					move.y = (pointer.y - this.prev_touches[n].y) / this.viewScale;
+					//this.rotCamera(
+					//    -2.0 * Math.PI * move.x / this.rotDegree,
+					//    2.0 * Math.PI * move.y / this.rotDegree);
 				}
 			} else if (touches_current.length == 2 && this.prev_touches.length == 2) {
 				let p0 = this.prev_touches[0];
 				let p1 = this.prev_touches[1];
 				let r0 = this.pointerPositionDecoder(touches_current[0]);
 				let r1 = this.pointerPositionDecoder(touches_current[1]);
-				move.x = ((r0.x + r1.x) - (p0.x + p1.x)) * 0.5;
-				move.y = ((r0.y + r1.y) - (p0.y + p1.y)) * 0.5;
+				move.x = ((r0.x + r1.x) - (p0.x + p1.x)) * 0.5 / this.viewScale;
+				move.y = ((r0.y + r1.y) - (p0.y + p1.y)) * 0.5 / this.viewScale;
 				let dp = Math.sqrt(Math.pow(p0.x - p1.x, 2) + Math.pow(p0.y - p1.y, 2));
 				let d = Math.sqrt(Math.pow(r0.x - r1.x, 2) + Math.pow(r0.y - r1.y, 2));
-				this.moveCamera(move.x, move.y, d - dp);
+				// Invert signs because we want move the plane
+				this.moveCamera(-move.x, -move.y, 1 + Math.sign(d - dp) * this.viewScaleStep);
 			}
 			this.prev_touches = touches_current.map(this.extractTouches, this);
 		}
@@ -347,12 +329,6 @@ class FractaLaVue {
 		return {x: pos.x, y: pos.y, identifier: a.identifier};
 	}
 
-	wheelMove(event)
-	{
-		event.preventDefault();
-		this.moveCamera(0, 0, -event.deltaY);
-	}
-
 	mouseDblClick(event)
 	{
 		event.preventDefault();
@@ -366,6 +342,12 @@ class FractaLaVue {
 		this.chaseBHInvoked = true;
 		this.chasingBHDistanceCurrent = this.chaseBHDistance;
 		this.chaseBHClickedPos = this.pointerPositionDecoder(event.touches[0]);
+	}
+
+	wheelMove(e)
+	{
+		event.preventDefault();
+		this.moveCamera(0, 0, 1 - Math.sign(event.deltaY) * this.viewScaleStep);
 	}
 
 	keyDown(event)
@@ -387,22 +369,20 @@ class FractaLaVue {
 		this.overwriting = !this.overwriting;
 	}
 
-	switchView3D()
+	switchCalcCMode()
 	{
-		this.view3D = (this.view3D + 1) % 3;
-		switch (this.view3D) {
-			case 1:
-				this.view3DButton.innerHTML = "3D view switch (cross)";
-				this.overwritingButton.style.opacity = "0.0";
+		switch (this.calcCMode) {
+			case "normal":
+				this.calcCMode = "exp";
 				break;
-			case 2:
-				this.view3DButton.innerHTML = "3D view switch (parallel)";
-				this.overwritingButton.style.opacity = "0.0";
+			case "exp":
+				this.calcCMode = "z^2";
 				break;
 			default:
-				this.view3DButton.innerHTML = "3D view switch (normal)";
-				this.overwritingButton.style.opacity = "1.0";
+				this.calcCMode = "normal";
 		}
+		this.calcCModeButton.innerHTML = "calc C mode (" + this.calcCMode + ")";
+		this.initFlag = true;
 	}
 }
 
