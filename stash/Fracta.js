@@ -22,9 +22,9 @@ class FractaLaVue {
 		this.touchCounter = 0;
 		this.touchCounting = false;
 
-		this.overwritingButton = null;
+		this.colorDisplayButton = null;
 		this.fractalModeButton = null;
-		this.overwriting = false;
+		this.colorDisplay = 0;
 		this.fractalMode = "Mandelbrot_normal";
 		this.JuliaC = {re: -0.8, im: 0.156};
 		this.JuliaFunctionOrdinary = function (z, c) {
@@ -49,6 +49,7 @@ class FractaLaVue {
 
 		this.timeClock = null;
 
+		this.colormap = null;
 		this.bitmap = null;
 		this.canvas = null;
 		this.context = null;
@@ -69,6 +70,8 @@ class FractaLaVue {
 // ----- Initialize -----
 	init()
 	{
+		// Initialize colormap
+		this.initColormap(256);
 		// Initialize canvas
 		this.prepareCanvas();
 		// Set event listener
@@ -130,13 +133,13 @@ class FractaLaVue {
 
 	prepareTools()
 	{
-		this.overwritingButton = document.createElement("div");
-		this.overwritingButton.rootInstance = this;
-		this.overwritingButton.innerHTML = "Overwriting";
-		this.overwritingButton.id = "FractaLaVueOverWritingButton";
-		this.overwritingButton.addEventListener("mousedown", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchOverwriting(e); }, false);
-		this.overwritingButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchOverwriting(e); }, false);
-		this.rootWindow.appendChild(this.overwritingButton);
+		this.colorDisplayButton = document.createElement("div");
+		this.colorDisplayButton.rootInstance = this;
+		this.colorDisplayButton.innerHTML = "monochrome";
+		this.colorDisplayButton.id = "FractaLaVueColorDisplayButton";
+		this.colorDisplayButton.addEventListener("mousedown", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchColorDisplay(e); }, false);
+		this.colorDisplayButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchColorDisplay(e); }, false);
+		this.rootWindow.appendChild(this.colorDisplayButton);
 
 		this.fractalModeButton = document.createElement("div");
 		this.fractalModeButton.rootInstance = this;
@@ -169,6 +172,65 @@ class FractaLaVue {
 			}
 		}
 	}
+
+	initColormap(length)
+	{
+		this.colormap = [];
+		let S = 0.6;
+		let V = 1.0;
+		for (let i = 0; i < length; i++) {
+			this.colormap.push(
+				this.HSV2RGB(i / length * 360.0, S, V));
+		}
+	}
+	
+	HSV2RGB(H, S, V)
+	{
+		if (H < 0) {
+			H = (H % 360) + 360;
+		}
+		let angle = (H % 360) / 60.0;
+		let C = S;
+		let X = C * (1 - Math.abs((angle % 2) - 1));
+		let color = {
+			R: V - C,
+			G: V - C,
+			B: V - C};
+		if (S > 0) {
+			switch (Math.floor(angle)) {
+				case 0:
+					color.R += C;
+					color.G += X;
+					break;
+				case 1:
+					color.R += X;
+					color.G += C
+					break;
+				case 2:
+					color.G += C;
+					color.B += X;
+					break;
+				case 3:
+					color.G += X;
+					color.B += C;
+					break;
+				case 4:
+					color.R += X;
+					color.B += C;
+					break;
+				case 5:
+					color.R += C;
+					color.B += X;
+					break;
+			}
+		}
+
+		color.R = Math.floor(255 * color.R);
+		color.G = Math.floor(255 * color.G);
+		color.B = Math.floor(255 * color.B);
+		return color;
+	}
+
 
 
 	// ----- Start Simulation -----
@@ -284,14 +346,42 @@ class FractaLaVue {
 		for (let m = 0; m < this.canvas.height; m++) {
 			for (let n = 0; n < this.canvas.width; n++) {
 				if (this.c_abs(this.fractalMap[this.canvas.width * m + n].z) < 2.0) {
-					this.bitmap.data[4 * (this.canvas.width * m + n)] = 255;
-					this.bitmap.data[4 * (this.canvas.width * m + n) + 1] = 255;
-					this.bitmap.data[4 * (this.canvas.width * m + n) + 2] = 0;
+					let intensity = 255;
+					if (this.colorDisplay == 2) {
+						intensity = 0;
+					}
+					this.bitmap.data[4 * (this.canvas.width * m + n)] = intensity;
+					this.bitmap.data[4 * (this.canvas.width * m + n) + 1] = intensity;
+					this.bitmap.data[4 * (this.canvas.width * m + n) + 2] = intensity;
 				} else {
-					let time = Math.pow(this.fractalMap[this.canvas.width * m + n].t / this.fractalTimeCurrent, 0.18);
-					this.bitmap.data[4 * (this.canvas.width * m + n)] = Math.ceil(time * 255);
-					this.bitmap.data[4 * (this.canvas.width * m + n) + 1] = 0;
-					this.bitmap.data[4 * (this.canvas.width * m + n) + 2] = 0;
+					let val = Math.pow(this.fractalMap[this.canvas.width * m + n].t / this.fractalTimeCurrent, 0.3);
+					if (val > 1.0) {
+						val = 1 - 1e-6;
+					}
+					let color;
+					if (this.colorDisplay > 0) {
+						let pcolor = this.colormap[Math.floor(2 * val * this.colormap.length) % this.colormap.length];
+						if (this.colorDisplay == 2) {
+							color = {
+								R: 255 - pcolor.R,
+								G: 255 - pcolor.G,
+								B: 255 - pcolor.B};
+						} else {
+							color = {
+								R: pcolor.R,
+								G: pcolor.G,
+								B: pcolor.B};
+						}
+					} else {
+						let tmp = Math.floor(255 * val);
+						color = {
+							R: tmp,
+							G: tmp,
+							B: tmp};
+					}
+					this.bitmap.data[4 * (this.canvas.width * m + n)] = color.R;
+					this.bitmap.data[4 * (this.canvas.width * m + n) + 1] = color.G;
+					this.bitmap.data[4 * (this.canvas.width * m + n) + 2] = color.B;
 				}
 			}
 		}
@@ -431,9 +521,19 @@ class FractaLaVue {
 		}
 	}
 
-	switchOverwriting()
+	switchColorDisplay()
 	{
-		this.overwriting = !this.overwriting;
+		this.colorDisplay = (this.colorDisplay + 1) % 3;
+		switch (this.colorDisplay) {
+			case 0:
+				this.colorDisplayButton.innerHTML = "monochrome";
+				break;
+			case 1:
+				this.colorDisplayButton.innerHTML = "color";
+				break;
+			case 2:
+				this.colorDisplayButton.innerHTML = "color neg";
+		}
 	}
 
 	switchCalcCMode()
