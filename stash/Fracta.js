@@ -23,10 +23,29 @@ class FractaLaVue {
 		this.touchCounting = false;
 
 		this.overwritingButton = null;
-		this.calcCModeButton = null;
+		this.fractalModeButton = null;
 		this.overwriting = false;
-		this.fractalMode = "z_{n + 1} = z_{n} + c";
-		this.calcCMode = "normal";
+		this.fractalMode = "Mandelbrot_normal";
+		this.JuliaC = {re: -0.8, im: 0.156};
+		this.JuliaFunctionOrdinary = function (z, c) {
+			return this.c_plus(this.c_mult(z, z), c);
+		};
+		this.JuliaFunctionNewton = function (z, c) {
+			return this.c_plus(
+				this.c_mult({re: 2/3, im: 0}, z),
+				this.c_div({re: 1/3, im: 0}, this.c_mult(z, z)));
+		};
+		this.JuliaFunction = this.JuliaFunctionOrdinary;
+		this.fractalModeDisplayEqMandelbrot_normal =
+		    "<math>" +
+		    "<msub><mi>z</mi><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo>" +
+		    "<msub><mi>z</mi><mi>n</mi></msub><mo>+</mo><mi>c</mi>" +
+		    "</math>" + "," +
+		    "<br>" +
+		    "<math>" +
+		    "<mi>c</mi><mo>=</mo>" +
+		    "<mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi>" +
+		    "</math>";
 
 		this.timeClock = null;
 
@@ -37,7 +56,7 @@ class FractaLaVue {
 		this.viewScaleStep = 0.5;
 
 		this.camera = {
-			pos: {x: -1.0, y: 0.0, z: 0.0},
+			pos: {x: 0.0, y: 0.0, z: 0.0},
 		};
 
 		this.prev_mouse = {x: 0, y: 0};
@@ -119,21 +138,35 @@ class FractaLaVue {
 		this.overwritingButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchOverwriting(e); }, false);
 		this.rootWindow.appendChild(this.overwritingButton);
 
-		this.calcCModeButton = document.createElement("div");
-		this.calcCModeButton.rootInstance = this;
-		this.calcCModeButton.innerHTML = "calc C mode (" + this.calcCMode + ")";
-		this.calcCModeButton.id = "FractaLaVueCalcCModeButton";
-		this.calcCModeButton.addEventListener("mousedown", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchCalcCMode(e); }, false);
-		this.calcCModeButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchCalcCMode(e); }, false);
-		this.rootWindow.appendChild(this.calcCModeButton);
+		this.fractalModeButton = document.createElement("div");
+		this.fractalModeButton.rootInstance = this;
+		this.fractalModeButton.innerHTML = this.fractalModeDisplayEqMandelbrot_normal;
+		this.fractalModeButton.id = "FractaLaVueFractalModeButton";
+		this.fractalModeButton.addEventListener("mousedown", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchCalcCMode(e); }, false);
+		this.fractalModeButton.addEventListener("touchstart", function (e) { e.preventDefault(); e.currentTarget.rootInstance.switchCalcCMode(e); }, false);
+		this.rootWindow.appendChild(this.fractalModeButton);
 	}
 
 	initFractal() {
 		this.fractalTimeCurrent = 0;
-		for (let i = 0; i < this.canvas.height * this.canvas.width; i++) {
-			this.fractalMap[i] = {
-				t: 0,
-				z: {re: 0, im: 0}};
+		if (this.fractalMode.indexOf("Julia") == 0) {
+			for (let m = 0; m < this.canvas.height; m++) {
+				for (let n = 0; n < this.canvas.width; n++) {
+					this.fractalMap[this.canvas.width * m + n] = {
+							t: 0,
+							z: {
+								re: this.camera.pos.x + (n - this.canvas.width / 2.0) / this.viewScale,
+								im: this.camera.pos.y + (m - this.canvas.height / 2.0) / this.viewScale
+							}
+						};
+				}
+			}
+		} else { // Mandelbrot
+			for (let i = 0; i < this.canvas.height * this.canvas.width; i++) {
+				this.fractalMap[i] = {
+					t: 0,
+					z: {re: 0, im: 0}};
+			}
 		}
 	}
 
@@ -148,7 +181,11 @@ class FractaLaVue {
 			this.initFlag = false;
 			this.initFractal();
 		}
-		this.calculate();
+		if (this.fractalMode.indexOf("Julia") == 0) {
+			this.calculateJulia();
+		} else {
+			this.calculate();
+		}
 		this.draw();
 		this.loopEnded = true;
 	}
@@ -168,11 +205,28 @@ class FractaLaVue {
 						this.c_getC({
 							re: this.camera.pos.x + (n - this.canvas.width / 2.0) / this.viewScale,
 							im: this.camera.pos.y + (m - this.canvas.height / 2.0) / this.viewScale
-						}, this.calcCMode));
-					this.fractalMap[this.canvas.width * m + n].z = zp;
+						}, this.fractalMode));
 					if (this.c_abs(zp) < 2.0) {
 						this.fractalMap[this.canvas.width * m + n].t += 1;
 					}
+					this.fractalMap[this.canvas.width * m + n].z = zp;
+				}
+			}
+		}
+	}
+
+	calculateJulia()
+	{
+		for (let t = 0; t < this.fractalTimeStep; t++) {
+			this.fractalTimeCurrent += 1;
+			for (let m = 0; m < this.canvas.height; m++) {
+				for (let n = 0; n < this.canvas.width; n++) {
+					let z = this.fractalMap[this.canvas.width * m + n].z;
+					let zp = this.JuliaFunction(z, this.JuliaC);
+					if (this.c_abs(zp) < 2.0 && this.c_abs(this.c_minus(zp, z)) > 1e-0) {
+						this.fractalMap[this.canvas.width * m + n].t += 1;
+					}
+					this.fractalMap[this.canvas.width * m + n].z = zp;
 				}
 			}
 		}
@@ -183,10 +237,22 @@ class FractaLaVue {
 		return {re: z1.re + z2.re, im: z1.im + z2.im};
 	}
 
+	c_minus(z1, z2)
+	{
+		return {re: z1.re - z2.re, im: z1.im - z2.im};
+	}
+
 	c_mult(z1, z2)
 	{
 		return {re: z1.re * z2.re - z1.im * z2.im,
 			im: z1.im * z2.re + z1.re * z2.im};
+	}
+
+	c_div(z1, z2)
+	{
+		let r = z2.re * z2.re + z2.im * z2.im;
+		return {re: (z1.re * z2.re + z1.im * z2.im) / r,
+			im: (z1.im * z2.re - z1.re * z2.im) / r};
 	}
 
 	c_abs(z)
@@ -196,13 +262,13 @@ class FractaLaVue {
 
 	c_getC(z, mode)
 	{
-		if (mode === "exp") {
+		if (mode === "Mandelbrot_exp") {
 			let r = Math.exp(z.re);
 			return {re: r * Math.cos(z.im),
 				im: r * Math.sin(z.im)};
-		} else if (mode === "z^2") {
+		} else if (mode === "Mandelbrot_z^2") {
 			return this.c_mult(z, z);
-		} else { // "normal"
+		} else { // "Mandelbrot_normal"
 			return {re: z.re,
 				im: z.im};
 		}
@@ -372,28 +438,45 @@ class FractaLaVue {
 
 	switchCalcCMode()
 	{
-		switch (this.calcCMode) {
-			case "normal":
-				this.calcCMode = "exp";
-				this.calcCModeButton.innerHTML = "<math>" +
+		switch (this.fractalMode) {
+			case "Mandelbrot_normal":
+				this.fractalMode = "Mandelbrot_exp";
+				this.fractalModeButton.innerHTML =
+				    "<math>" +
+				    "<msub><mi>z</mi><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo>" +
+				    "<msub><mi>z</mi><mi>n</mi></msub><mo>+</mo><mi>c</mi>" +
+				    "</math>" + "," +
+				    "<br>" +
+				    "<math>" +
 				    "<mi>c</mi><mo>=</mo>" +
 				    "<mi>exp</mi><mo>&ApplyFunction;</mo><mrow><mo>(</mo><mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi><mo>)</mo></mrow>" +
 				    "</math>";
 				break;
-			case "exp":
-				this.calcCMode = "z^2";
-				this.calcCModeButton.innerHTML = "<math>" +
+			case "Mandelbrot_exp":
+				this.fractalMode = "Mandelbrot_z^2";
+				this.fractalModeButton.innerHTML =
+				    "<math>" +
+				    "<msub><mi>z</mi><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo>" +
+				    "<msub><mi>z</mi><mi>n</mi></msub><mo>+</mo><mi>c</mi>" +
+				    "</math>" + "," +
+				    "<br>" +
+				    "<math>" +
 				    "<mi>c</mi><mo>=</mo>" +
 				    "<msup><mrow><mo>(</mo><mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi><mo>)</mo></mrow><mn>2</mn></msup>" +
 				    "</math>";
 				break;
-			default:
-				this.calcCMode = "normal";
-				this.calcCModeButton.innerHTML = "c = x + i * y";
-				this.calcCModeButton.innerHTML = "<math>" +
-				    "<mi>c</mi><mo>=</mo>" +
-				    "<mi>x</mi><mo>+</mo><mi>i</mi><mi>y</mi>" +
+			case "Mandelbrot_z^2":
+				this.fractalMode = "Julia";
+				this.fractalModeButton.innerHTML = "Julia set of<br><math>" +
+				    "<mi>f</mi><mo>&ApplyFunction;</mo><mrow><mo>(</mo><mi>z</mi><mo>)</mo></mrow>" +
+				    "<mo>=</mo>" +
+				    "<msup><mi>z</mi><mn>2</mn></msup><mo>+</mo><mo>(</mo><mn>" + this.JuliaC.re + "</mn><mo>" + (this.JuliaC.im > 0 ? "+" : "-") + "</mo><mn>" + Math.abs(this.JuliaC.im) + "</mn><mo>)</mo>" +
 				    "</math>";
+				break;
+			default:
+				this.fractalMode = "Mandelbrot_normal";
+				this.fractalModeButton.innerHTML = "c = x + i * y";
+				this.fractalModeButton.innerHTML = this.fractalModeDisplayEqMandelbrot_normal;
 		}
 		this.initFlag = true;
 	}
